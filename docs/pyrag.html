@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PyRAG: Executable Multi-Hop Reasoning for Retrieval-Augmented Generation</title>
+<meta name="description" content="PyRAG reformulates multi-hop RAG as program synthesis and execution, achieving state-of-the-art results on five QA benchmarks.">
+
+<meta property="og:title" content="PyRAG: Executable Multi-Hop Reasoning for RAG">
+<meta property="og:description" content="Retrieval is Cheap, Show Me the Code.">
+<meta property="og:type" content="website">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Manrope:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          serif: ['"Crimson Pro"', 'Georgia', 'serif'],
+          sans: ['Manrope', 'system-ui', 'sans-serif'],
+          mono: ['"JetBrains Mono"', 'Menlo', 'monospace'],
+        },
+        colors: {
+          ink: '#1a1a1a',
+          paper: '#fafaf7',
+          accent: '#c2410c',
+          muted: '#6b6b6b',
+          rule: '#e5e3dc',
+        }
+      }
+    }
+  }
+</script>
+
+<style>
+  body {
+    font-family: 'Manrope', system-ui, sans-serif;
+    background: #fafaf7;
+    color: #1a1a1a;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .pyrag { font-family: 'JetBrains Mono', monospace; font-weight: 600; letter-spacing: -0.02em; }
+  .pyrag .py { color: #1a1a1a; }
+  .pyrag .rag { color: #c2410c; }
+
+  .paper-bg {
+    background-color: #fafaf7;
+    background-image: radial-gradient(circle at 1px 1px, rgba(0,0,0,0.02) 1px, transparent 0);
+    background-size: 24px 24px;
+  }
+
+  pre.code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    line-height: 1.65;
+    background: #1a1a1a;
+    color: #f5f5f0;
+    padding: 1.25rem 1.5rem;
+    border-radius: 4px;
+    overflow-x: auto;
+    border-left: 3px solid #c2410c;
+    margin: 0;
+  }
+  pre.code .kw { color: #c2410c; }
+  pre.code .fn { color: #fbbf24; }
+  pre.code .str { color: #a3e635; }
+  pre.code .var { color: #93c5fd; }
+  pre.code .cmt { color: #6b7280; font-style: italic; }
+  pre.code .ok { color: #4ade80; font-weight: 600; }
+  pre.code .warn { color: #fbbf24; font-weight: 600; }
+  pre.code .err { color: #f87171; font-weight: 600; }
+
+  pre.code.warn-block { border-left: 3px solid #fbbf24; background: #1c1a13; }
+  pre.code.ok-block { border-left: 3px solid #4ade80; background: #131a13; }
+
+  .section-rule { display: flex; align-items: center; gap: 1rem; margin-bottom: 2rem; }
+  .section-rule::before { content: ""; display: block; width: 32px; height: 1px; background: #c2410c; }
+  .section-rule h2 {
+    font-family: 'Manrope', sans-serif; font-size: 0.78rem; text-transform: uppercase;
+    letter-spacing: 0.18em; font-weight: 600; color: #c2410c;
+  }
+
+  sup.aff { font-size: 0.65em; color: #c2410c; font-weight: 600; margin-left: 1px; }
+
+  .pill-btn {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    padding: 0.6rem 1.1rem; background: #1a1a1a; color: #fafaf7;
+    border-radius: 999px; font-size: 0.85rem; font-weight: 500;
+    transition: all 0.2s ease; border: 1px solid #1a1a1a;
+  }
+  .pill-btn:hover { background: #fafaf7; color: #1a1a1a; transform: translateY(-1px); }
+  .pill-btn.ghost { background: transparent; color: #1a1a1a; border-color: #1a1a1a; }
+  .pill-btn.ghost:hover { background: #1a1a1a; color: #fafaf7; }
+
+  .res-table { border-collapse: collapse; width: 100%; font-size: 0.88rem; font-variant-numeric: tabular-nums; }
+  .res-table th, .res-table td { padding: 0.7rem 0.95rem; text-align: right; border-bottom: 1px solid #e5e3dc; }
+  .res-table th {
+    font-weight: 600; font-size: 0.72rem; text-transform: uppercase;
+    letter-spacing: 0.08em; color: #6b6b6b; background: #f4f2eb;
+  }
+  .res-table td:first-child, .res-table th:first-child { text-align: left; }
+  .res-table tr.ours { background: #fdf3ec; }
+  .res-table tr.ours td:first-child { color: #c2410c; font-weight: 600; }
+  .res-table tr.section-header td {
+    background: #f4f2eb; font-weight: 600; text-transform: uppercase;
+    font-size: 0.72rem; letter-spacing: 0.08em; color: #6b6b6b; text-align: left;
+  }
+  .best { font-weight: 700; }
+  .delta { color: #c2410c; font-weight: 600; }
+
+  pre.bibtex {
+    font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; line-height: 1.7;
+    background: #f4f2eb; color: #1a1a1a; padding: 1.5rem 1.75rem;
+    border-radius: 4px; overflow-x: auto; border: 1px solid #e5e3dc;
+  }
+
+  .stage-card {
+    background: white; border: 1px solid #e5e3dc; border-radius: 6px;
+    padding: 1.5rem; position: relative; transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  .stage-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px -12px rgba(0,0,0,0.1); }
+  .stage-num {
+    position: absolute; top: -12px; left: 1.5rem; background: #c2410c; color: white;
+    font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; font-weight: 600;
+    padding: 0.25rem 0.6rem; border-radius: 999px; letter-spacing: 0.05em;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  .copy-btn {
+    position: absolute; top: 0.75rem; right: 0.75rem; background: white;
+    border: 1px solid #e5e3dc; padding: 0.4rem 0.8rem; border-radius: 4px;
+    font-size: 0.72rem; font-family: 'Manrope', sans-serif; cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .copy-btn:hover { background: #1a1a1a; color: white; border-color: #1a1a1a; }
+  .copy-btn.copied { background: #15803d; color: white; border-color: #15803d; }
+
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .fade-up { animation: fadeUp 0.6s ease-out both; }
+  .fade-up.d1 { animation-delay: 0.1s; }
+  .fade-up.d2 { animation-delay: 0.2s; }
+  .fade-up.d3 { animation-delay: 0.3s; }
+
+  /* ============ CAROUSEL ============ */
+  .carousel-wrap { position: relative; }
+  .carousel-track { overflow: hidden; border-radius: 8px; width: 100%; }
+  .carousel-slides { display: flex; transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1); width: 100%; }
+  .carousel-slide {
+    min-width: 100%;
+    width: 100%;
+    max-width: 100%;
+    flex-shrink: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  .case-card {
+    background: white; border-radius: 8px; overflow: hidden; border: 1px solid;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  .case-card.correct { border-color: #15803d; }
+  .case-card.fail { border-color: #b91c1c; }
+
+  .case-header {
+    padding: 1.25rem 1.5rem; border-bottom: 1px solid #e5e3dc;
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 1rem; flex-wrap: wrap;
+  }
+  .case-card.correct .case-header { background: #f0fdf4; }
+  .case-card.fail .case-header { background: #fef2f2; }
+
+  .case-label {
+    font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; font-weight: 600;
+    letter-spacing: 0.08em; padding: 0.3rem 0.7rem; border-radius: 999px;
+  }
+  .case-card.correct .case-label { background: #15803d; color: white; }
+  .case-card.fail .case-label { background: #b91c1c; color: white; }
+
+  .case-status { font-size: 0.8rem; font-weight: 600; }
+  .case-card.correct .case-status { color: #15803d; }
+  .case-card.fail .case-status { color: #b91c1c; }
+
+  .case-body { padding: 1.5rem; overflow: hidden; min-width: 0; }
+
+  .case-question {
+    font-family: 'Crimson Pro', Georgia, serif;
+    font-size: 1.1rem; font-style: italic; line-height: 1.5;
+    color: #1a1a1a; margin-bottom: 1rem;
+  }
+
+  .case-answers {
+    display: flex; gap: 1.5rem; flex-wrap: wrap; font-size: 0.85rem;
+    margin-bottom: 1.25rem; padding-bottom: 1.25rem; border-bottom: 1px dashed #e5e3dc;
+  }
+  .case-answers .label {
+    font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em;
+    color: #6b6b6b; font-weight: 600; margin-right: 0.4rem;
+  }
+  .case-answers .value {
+    font-family: 'JetBrains Mono', monospace; background: #f4f2eb;
+    padding: 0.15rem 0.5rem; border-radius: 3px; font-size: 0.8rem;
+  }
+  .case-card.correct .case-answers .value.predicted { color: #15803d; background: #dcfce7; }
+  .case-card.fail .case-answers .value.predicted { color: #b91c1c; background: #fee2e2; }
+
+  .case-takeaway {
+    margin-top: 1.25rem; padding: 1rem 1.25rem; background: #f4f2eb;
+    border-left: 3px solid #c2410c; border-radius: 0 4px 4px 0;
+    font-size: 0.9rem; line-height: 1.6; color: #1a1a1a;
+  }
+  .case-takeaway strong { color: #c2410c; font-weight: 600; }
+
+  .carousel-controls {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-top: 1.5rem; gap: 1rem;
+  }
+  .carousel-arrow {
+    background: white; border: 1px solid #e5e3dc;
+    width: 44px; height: 44px; border-radius: 999px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: all 0.2s; color: #1a1a1a; flex-shrink: 0;
+  }
+  .carousel-arrow:hover:not(:disabled) { background: #1a1a1a; color: white; border-color: #1a1a1a; }
+  .carousel-arrow:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  .carousel-dots {
+    display: flex; gap: 0.4rem; align-items: center;
+    flex-wrap: wrap; justify-content: center; flex: 1;
+  }
+  .carousel-dot {
+    width: 8px; height: 8px; border-radius: 999px;
+    background: #e5e3dc; border: none; cursor: pointer;
+    transition: all 0.2s; padding: 0;
+  }
+  .carousel-dot:hover { background: #c2410c; opacity: 0.6; }
+  .carousel-dot.active { background: #c2410c; width: 24px; }
+
+  .case-tabs {
+    display: flex; gap: 0.5rem; margin-bottom: 1.5rem; border-bottom: 1px solid #e5e3dc;
+    flex-wrap: wrap;
+  }
+  .case-tab {
+    padding: 0.6rem 1.1rem; font-size: 0.85rem; font-weight: 500;
+    color: #6b6b6b; background: transparent; border: none; cursor: pointer;
+    border-bottom: 2px solid transparent; transition: all 0.15s; margin-bottom: -1px;
+  }
+  .case-tab:hover { color: #1a1a1a; }
+  .case-tab.active { color: #c2410c; border-bottom-color: #c2410c; font-weight: 600; }
+  .case-tab .count {
+    font-family: 'JetBrains Mono', monospace; font-size: 0.7rem;
+    color: #9ca3af; margin-left: 0.4rem;
+  }
+  .case-tab.active .count { color: #c2410c; }
+
+  .slide-indicator {
+    font-family: 'JetBrains Mono', monospace; font-size: 0.75rem;
+    color: #6b6b6b; font-weight: 500;
+  }
+  .slide-indicator .current { color: #c2410c; font-weight: 600; }
+
+  @media (max-width: 640px) {
+    pre.code { font-size: 0.7rem; padding: 1rem; }
+    .case-question { font-size: 1rem; }
+  }
+</style>
+</head>
+<body class="paper-bg">
+
+<!-- HEADER -->
+<header class="max-w-5xl mx-auto px-6 pt-20 pb-12 text-center">
+
+  <h1 class="fade-up d1 font-serif text-4xl md:text-5xl lg:text-6xl leading-[1.1] tracking-tight mb-3">
+    Retrieval is Cheap, Show Me the Code:
+  </h1>
+  <h2 class="fade-up d1 font-serif text-2xl md:text-3xl lg:text-4xl leading-tight text-muted italic mb-10">
+    Executable Multi-Hop Reasoning for Retrieval-Augmented Generation
+  </h2>
+
+  <div class="fade-up d2 text-base md:text-lg leading-relaxed mb-3 font-sans">
+    <span>Jiashuo Sun<sup class="aff">*1</sup></span>,
+    <span>Jimeng Shi<sup class="aff">*1</sup></span>,
+    <span>Yixuan Xie<sup class="aff">1</sup></span>,
+    <span>Saizhuo Wang<sup class="aff">2</sup></span>,
+    <span>Jash Rajesh Parekh<sup class="aff">1</sup></span>,
+    <span>Pengcheng Jiang<sup class="aff">1</sup></span>,
+    <span>Zhiyi Shi<sup class="aff">1</sup></span>,
+    <span>Jiajun Fan<sup class="aff">1</sup></span>,
+    <span>Qinglong Zheng<sup class="aff">1</sup></span>,
+    <span>Peiran Li<sup class="aff">1,3</sup></span>,
+    <span>Shaowen Wang<sup class="aff">1</sup></span>,
+    <span>Ge Liu<sup class="aff">1</sup></span>,
+    <span>Jiawei Han<sup class="aff">1</sup></span>
+  </div>
+
+  <div class="fade-up d2 text-sm text-muted mb-2">
+    <sup class="aff">1</sup>University of Illinois Urbana-Champaign
+    &nbsp;&nbsp;<sup class="aff">2</sup>Hong Kong University of Science and Technology
+    &nbsp;&nbsp;<sup class="aff">3</sup>Texas A&amp;M University
+  </div>
+  <div class="fade-up d2 text-xs text-muted italic mb-10">
+    <sup class="aff">*</sup>Equal contribution
+  </div>
+
+  <div class="fade-up d3 flex flex-wrap justify-center gap-3">
+    <a href="#" class="pill-btn">Paper</a>
+    <a href="https://github.com/GasolSun36/PyRAG" class="pill-btn ghost">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.1.79-.25.79-.56v-2.01c-3.2.69-3.87-1.37-3.87-1.37-.52-1.33-1.27-1.68-1.27-1.68-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.76 2.69 1.25 3.35.96.1-.74.4-1.25.73-1.54-2.55-.29-5.23-1.28-5.23-5.69 0-1.26.45-2.29 1.18-3.1-.12-.29-.51-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.78 0c2.2-1.49 3.16-1.18 3.16-1.18.63 1.59.24 2.76.12 3.05.74.81 1.18 1.84 1.18 3.1 0 4.42-2.69 5.39-5.25 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56 4.57-1.52 7.86-5.83 7.86-10.91C23.5 5.65 18.35.5 12 .5z"/></svg>
+      Code
+    </a>
+    <a href="#cases" class="pill-btn ghost">Case</a>
+    <a href="#bibtex" class="pill-btn ghost">BibTeX</a>
+  </div>
+</header>
+
+<!-- TEASER -->
+<section class="max-w-5xl mx-auto px-6 mb-20">
+  <div class="bg-white border border-rule rounded-lg p-8 md:p-12">
+    <div class="text-center text-xs uppercase tracking-[0.2em] text-muted mb-6 font-semibold">The Question</div>
+    <div class="font-serif text-2xl md:text-3xl text-center italic mb-10 leading-snug">
+      "Who is older, Jed Hoyer or John William Henry II?"
+    </div>
+    <div class="grid md:grid-cols-3 gap-6">
+      <div class="border border-rule rounded p-5 bg-paper">
+        <div class="text-xs uppercase tracking-wider text-muted mb-2 font-semibold">Vanilla RAG</div>
+        <div class="text-sm mb-3 leading-relaxed">Single-shot retrieve-then-read. Noisy evidence, one chance.</div>
+        <div class="text-xs font-mono text-red-700">✗ Prone to incomplete evidence</div>
+      </div>
+      <div class="border border-rule rounded p-5 bg-paper">
+        <div class="text-xs uppercase tracking-wider text-muted mb-2 font-semibold">Search Agent</div>
+        <div class="text-sm mb-3 leading-relaxed">Iterative think→search→observe. Vague queries cause entity drift.</div>
+        <div class="text-xs font-mono text-yellow-700">△ Error accumulation</div>
+      </div>
+      <div class="border-2 border-accent rounded p-5 bg-white">
+        <div class="text-xs uppercase tracking-wider text-accent mb-2 font-semibold">
+          <span class="pyrag"><span class="py">Py</span><span class="rag">RAG</span></span> (Ours)
+        </div>
+        <div class="text-sm mb-3 leading-relaxed">Decompose into atomic sub-queries, synthesize an executable program, run it.</div>
+        <div class="text-xs font-mono text-green-700">✓ Inspectable &amp; verifiable</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ABSTRACT -->
+<section class="max-w-3xl mx-auto px-6 mb-20">
+  <div class="section-rule"><h2>Abstract</h2></div>
+  <p class="font-serif text-lg leading-relaxed text-ink">
+    Retrieval-Augmented Generation (RAG) has become a standard approach for knowledge-intensive
+    question answering, but existing systems remain brittle on multi-hop questions. Current
+    methods represent reasoning through <em>free-form natural language</em>, where intermediate
+    states are implicit, retrieval queries can drift from intended entities, and errors are
+    detected by the same model that produces them.
+  </p>
+  <p class="font-serif text-lg leading-relaxed text-ink mt-5">
+    We introduce <span class="pyrag"><span class="py">Py</span><span class="rag">RAG</span></span>,
+    a framework that reformulates multi-hop RAG as program synthesis and execution.
+    <span class="pyrag"><span class="py">Py</span><span class="rag">RAG</span></span>
+    represents the reasoning process as an executable Python program over retrieval and QA tools,
+    exposing intermediate states as variables, producing deterministic feedback through execution,
+    and yielding an inspectable trace of the entire reasoning process.
+  </p>
+  <p class="font-serif text-lg leading-relaxed text-ink mt-5">
+    Experiments on five QA benchmarks show that
+    <span class="pyrag"><span class="py">Py</span><span class="rag">RAG</span></span>
+    consistently outperforms strong baselines under both training-free and RL-trained settings,
+    with <strong>+25.5 EM on Bamboogle</strong> over Vanilla RAG.
+  </p>
+</section>
+
+<!-- KEY IDEA -->
+<section class="max-w-5xl mx-auto px-6 mb-24">
+  <div class="section-rule"><h2>The Key Idea</h2></div>
+  <h3 class="font-serif text-3xl md:text-4xl mb-6 leading-tight">
+    What if the reasoning trace <em>was</em> the program?
+  </h3>
+  <p class="text-base md:text-lg text-muted leading-relaxed mb-8 max-w-3xl">
+    Multi-hop QA is fundamentally step-by-step computation: decompose, compute intermediates,
+    compose. This is exactly what code-specialized LLMs are trained to do. We synthesize an
+    executable Python program over two primitives:
+    <code class="text-ink bg-rule px-1.5 py-0.5 rounded text-sm font-mono">retrieve(query)</code> and
+    <code class="text-ink bg-rule px-1.5 py-0.5 rounded text-sm font-mono">answer(query, docs)</code>.
+  </p>
+
+<pre class="code"><span class="cmt"># Step 1–2: When was Jed Hoyer born?</span>
+<span class="var">doc1</span> = <span class="fn">retrieve</span>(<span class="str">"When was Jed Hoyer born?"</span>)
+<span class="var">jed_birth</span> = <span class="fn">answer</span>(<span class="str">"When was Jed Hoyer born?"</span>, <span class="var">doc1</span>)
+
+<span class="cmt"># Step 3–4: When was John William Henry II born?</span>
+<span class="var">doc2</span> = <span class="fn">retrieve</span>(<span class="str">"When was John William Henry II born?"</span>)
+<span class="var">john_birth</span> = <span class="fn">answer</span>(<span class="str">"When was John William Henry II born?"</span>, <span class="var">doc2</span>)
+
+<span class="cmt"># Step 5: Compose — handled by Python, not free-form LLM reasoning</span>
+<span class="var">jed_date</span>  = datetime.strptime(re.search(<span class="str">r"[A-Z][a-z]+\s\d{1,2},\s\d{4}"</span>, <span class="var">jed_birth</span>).group(), <span class="str">"%B %d, %Y"</span>)
+<span class="var">john_date</span> = datetime.strptime(re.search(<span class="str">r"[A-Z][a-z]+\s\d{1,2},\s\d{4}"</span>, <span class="var">john_birth</span>).group(), <span class="str">"%B %d, %Y"</span>)
+
+<span class="kw">return</span> <span class="str">"Jed Hoyer"</span> <span class="kw">if</span> <span class="var">jed_date</span> &lt; <span class="var">john_date</span> <span class="kw">else</span> <span class="str">"John William Henry II"</span>
+<span class="cmt"># → John William Henry II  ✓</span></pre>
+
+  <div class="grid md:grid-cols-3 gap-6 mt-10">
+    <div>
+      <div class="text-xs uppercase tracking-wider text-accent font-semibold mb-2">Explicit state</div>
+      <div class="text-sm leading-relaxed text-ink">Intermediate results are <em>variables</em>, not narrative fragments. No entity drift.</div>
+    </div>
+    <div>
+      <div class="text-xs uppercase tracking-wider text-accent font-semibold mb-2">Deterministic feedback</div>
+      <div class="text-sm leading-relaxed text-ink">Compiler/runtime errors are real signals — not the LLM grading itself.</div>
+    </div>
+    <div>
+      <div class="text-xs uppercase tracking-wider text-accent font-semibold mb-2">Inspectable trace</div>
+      <div class="text-sm leading-relaxed text-ink">Every retrieval, every answer, every variable — recorded and auditable.</div>
+    </div>
+  </div>
+</section>
+
+<!-- FRAMEWORK -->
+<section class="max-w-5xl mx-auto px-6 mb-24">
+  <div class="section-rule"><h2>Framework</h2></div>
+  <h3 class="font-serif text-3xl md:text-4xl mb-10 leading-tight">Three agents, one execution interface.</h3>
+
+  <div class="grid md:grid-cols-3 gap-6 mb-12">
+    <div class="stage-card">
+      <div class="stage-num">01 · Decompose</div>
+      <div class="mt-3 font-serif text-xl mb-3">Atomic sub-queries</div>
+      <p class="text-sm text-muted leading-relaxed">An LLM breaks the question into independently answerable single-hop queries.</p>
+    </div>
+    <div class="stage-card">
+      <div class="stage-num">02 · Plan</div>
+      <div class="mt-3 font-serif text-xl mb-3">Synthesize program</div>
+      <p class="text-sm text-muted leading-relaxed">A code-specialized LLM emits a Python program threading <code class="font-mono text-xs bg-rule px-1 rounded">retrieve</code> and <code class="font-mono text-xs bg-rule px-1 rounded">answer</code> calls through named variables.</p>
+    </div>
+    <div class="stage-card">
+      <div class="stage-num">03 · Execute</div>
+      <div class="mt-3 font-serif text-xl mb-3">Run step-by-step</div>
+      <p class="text-sm text-muted leading-relaxed">A Python interpreter runs the plan, producing an inspectable trace and grounded final answer.</p>
+    </div>
+  </div>
+
+  <div class="grid md:grid-cols-2 gap-6">
+    <div class="bg-white border border-rule rounded p-6">
+      <div class="text-xs uppercase tracking-[0.15em] text-accent font-semibold mb-3">ⓐ Compiler-Grounded Self-Repair</div>
+      <p class="text-sm leading-relaxed text-ink mb-3">
+        If the program raises a runtime exception, the traceback is fed back to the Plan Agent
+        as a <em>deterministic, grounded</em> signal.
+      </p>
+      <p class="text-xs text-muted italic">Triggers on ~5% of queries. No additional training.</p>
+    </div>
+    <div class="bg-white border border-rule rounded p-6">
+      <div class="text-xs uppercase tracking-[0.15em] text-accent font-semibold mb-3">ⓑ Execution-Driven Adaptive Retrieval</div>
+      <p class="text-sm leading-relaxed text-ink mb-3">
+        When <code class="font-mono text-xs bg-rule px-1 rounded">answer()</code> returns a sentinel
+        like <code class="font-mono text-xs bg-rule px-1 rounded">"unknown"</code>, the runtime
+        automatically re-retrieves with a boosted top-<em>k</em>.
+      </p>
+      <p class="text-xs text-muted italic">Triggers on ~20% of queries. Targeted, not global.</p>
+    </div>
+  </div>
+</section>
+
+<!-- RESULTS -->
+<section class="max-w-5xl mx-auto px-6 mb-24">
+  <div class="section-rule"><h2>Results</h2></div>
+  <h3 class="font-serif text-3xl md:text-4xl mb-3 leading-tight">Consistent gains. Largest on compositional multi-hop.</h3>
+  <p class="text-base text-muted mb-10 max-w-3xl">Exact Match (%) on five open-domain QA benchmarks, training-free setting.</p>
+
+  <div class="overflow-x-auto">
+    <table class="res-table">
+      <thead>
+        <tr>
+          <th>Method</th><th>PopQA</th><th>HotpotQA</th><th>2WikiMQA</th><th>MuSiQue</th><th>Bamboogle</th><th>Avg.</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="section-header"><td colspan="7">Qwen2.5-7B-Instruct</td></tr>
+        <tr><td>Direct Inference</td><td>14.0</td><td>18.3</td><td>12.6</td><td>3.1</td><td>12.0</td><td>12.0</td></tr>
+        <tr><td>Vanilla RAG</td><td>26.7</td><td>28.9</td><td>18.9</td><td>4.7</td><td>16.0</td><td>19.0</td></tr>
+        <tr><td>Self-Ask</td><td>29.4</td><td>30.2</td><td>21.5</td><td>6.8</td><td>22.1</td><td>22.0</td></tr>
+        <tr><td>IRCoT</td><td>32.6</td><td>32.7</td><td>24.8</td><td>9.1</td><td>24.3</td><td>24.7</td></tr>
+        <tr><td>ITER-RETGEN</td><td>31.4</td><td>32.5</td><td>28.9</td><td>8.7</td><td>29.6</td><td>26.2</td></tr>
+        <tr class="ours"><td>PyRAG (ours)</td><td class="best">33.5</td><td class="best">34.0</td><td class="best">33.4</td><td class="best">11.8</td><td class="best">41.5</td><td class="best">30.8</td></tr>
+        <tr><td style="font-style:italic; color:#6b6b6b;">∆ vs. Vanilla RAG</td><td class="delta">+6.8</td><td class="delta">+5.1</td><td class="delta">+14.5</td><td class="delta">+7.1</td><td class="delta">+25.5</td><td class="delta">+11.8</td></tr>
+
+        <tr class="section-header"><td colspan="7">Qwen2.5-72B-Instruct</td></tr>
+        <tr><td>Vanilla RAG</td><td>33.2</td><td>36.8</td><td>30.4</td><td>10.6</td><td>21.6</td><td>26.5</td></tr>
+        <tr><td>ITER-RETGEN</td><td>43.4</td><td>50.5</td><td>40.2</td><td>13.8</td><td>33.6</td><td>36.3</td></tr>
+        <tr class="ours"><td>PyRAG (ours)</td><td class="best">45.5</td><td class="best">52.0</td><td class="best">44.4</td><td class="best">16.9</td><td class="best">45.5</td><td class="best">40.9</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="grid md:grid-cols-3 gap-6 mt-12">
+    <div class="bg-white border border-rule rounded p-6 text-center">
+      <div class="font-serif text-5xl text-accent font-semibold mb-2">+25.5</div>
+      <div class="text-xs uppercase tracking-wider text-muted">EM gain on Bamboogle<br>(7B, vs. Vanilla RAG)</div>
+    </div>
+    <div class="bg-white border border-rule rounded p-6 text-center">
+      <div class="font-serif text-5xl text-accent font-semibold mb-2">+11.8</div>
+      <div class="text-xs uppercase tracking-wider text-muted">Average EM gain<br>across 5 benchmarks</div>
+    </div>
+    <div class="bg-white border border-rule rounded p-6 text-center">
+      <div class="font-serif text-5xl text-accent font-semibold mb-2">3.7</div>
+      <div class="text-xs uppercase tracking-wider text-muted">LLM calls / query<br>(matches Search-R1's EM)</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============== CASE STUDIES CAROUSEL ============== -->
+<section id="cases" class="max-w-5xl mx-auto px-6 mb-24">
+  <div class="section-rule"><h2>Case Studies</h2></div>
+  <h3 class="font-serif text-3xl md:text-4xl mb-4 leading-tight">See PyRAG in action.</h3>
+  <p class="text-base text-muted mb-10 max-w-3xl">
+    Four representative execution traces from HotpotQA. Each case shows the generated program,
+    intermediate variable bindings, and what makes the executable interface work. Use arrows,
+    dots, or keyboard ← → to navigate.
+  </p>
+
+  <!-- Carousel -->
+  <div class="carousel-wrap">
+    <div class="carousel-track">
+      <div class="carousel-slides" id="carouselSlides">
+
+        <!-- CASE A -->
+        <div class="carousel-slide" data-type="correct">
+          <div class="case-card correct">
+            <div class="case-header">
+              <div class="flex items-center gap-3">
+                <span class="case-label">Case A</span>
+                <span class="text-sm text-muted">Variable threading across hops</span>
+              </div>
+              <span class="case-status">✓ Correct</span>
+            </div>
+            <div class="case-body">
+              <div class="case-question">"2014 S/S is the debut album of a South Korean boy group that was formed by who?"</div>
+              <div class="case-answers">
+                <div><span class="label">Gold</span><span class="value">YG Entertainment</span></div>
+                <div><span class="label">Predicted</span><span class="value predicted">YG Entertainment</span></div>
+              </div>
+<pre class="code"><span class="cmt"># Step 1-2: identify the boy group</span>
+<span class="var">ctx_grp</span> = <span class="fn">retrieve</span>(<span class="str">"2014 S/S debut South Korean boy group"</span>, topk=5)
+<span class="var">group</span>   = <span class="fn">answer</span>(<span class="str">"Which group is the album by?"</span>, <span class="var">ctx_grp</span>)
+<span class="cmt"># group = "WINNER"</span>
+
+<span class="cmt"># Step 3-4: the next query *uses* the bound variable `group`</span>
+<span class="var">ctx_co</span>  = <span class="fn">retrieve</span>(f<span class="str">"Which company formed {group}?"</span>, topk=5)
+<span class="var">company</span> = <span class="fn">answer</span>(f<span class="str">"Which company formed {group}?"</span>, <span class="var">ctx_co</span>)
+<span class="cmt"># company = "YG Entertainment"</span>
+
+<span class="cmt"># Step 5: final aggregation built from the two intermediate variables</span>
+<span class="var">final</span> = <span class="fn">answer</span>(
+    f<span class="str">"Given: {group} is a South Korean boy group; "</span>
+    f<span class="str">"{company} formed {group}. "</span>
+    f<span class="str">"Answer the question: 2014 S/S is the debut album "</span>
+    f<span class="str">"of a South Korean boy group that was formed by who?"</span>,
+    <span class="var">ctx_co</span>,
+)
+<span class="cmt"># final -> "YG Entertainment"   </span><span class="ok">[ok]</span></pre>
+              <div class="case-takeaway">
+                <strong>Takeaway:</strong> Variables produced at one step are explicitly consumed by
+                subsequent calls through string interpolation. The data dependency
+                <code class="font-mono text-xs bg-white px-1 rounded">group → company</code>
+                is visible in the program structure itself.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- CASE B -->
+        <div class="carousel-slide" data-type="correct">
+          <div class="case-card correct">
+            <div class="case-header">
+              <div class="flex items-center gap-3">
+                <span class="case-label">Case B</span>
+                <span class="text-sm text-muted">Self-correction via re-retrieval</span>
+              </div>
+              <span class="case-status">✓ Correct</span>
+            </div>
+            <div class="case-body">
+              <div class="case-question">"Which other Mexican Formula One race car driver has held the podium besides the Force India driver born in 1990?"</div>
+              <div class="case-answers">
+                <div><span class="label">Gold</span><span class="value">Pedro Rodríguez</span></div>
+                <div><span class="label">Predicted</span><span class="value predicted">Pedro Rodríguez</span></div>
+              </div>
+<pre class="code"><span class="cmt"># Step 1-2: a known Mexican F1 podium driver</span>
+<span class="var">ctx_a</span>   = <span class="fn">retrieve</span>(<span class="str">"Mexican F1 driver who held the podium"</span>, topk=5)
+<span class="var">known</span>   = <span class="fn">answer</span>(<span class="str">"Who is the Mexican F1 podium driver?"</span>, <span class="var">ctx_a</span>)
+<span class="cmt"># known = "Sergio Pérez"</span>
+
+<span class="cmt"># Step 3-4: try to identify the Force India 1990-born driver</span>
+<span class="var">ctx_b</span>   = <span class="fn">retrieve</span>(<span class="str">"Force India driver born in 1990"</span>, topk=5)
+<span class="var">exclude</span> = <span class="fn">answer</span>(<span class="str">"Which Force India driver was born in 1990?"</span>, <span class="var">ctx_b</span>)
+<span class="cmt"># exclude = "unknown"      </span><span class="warn">[warn] insufficient evidence</span></pre>
+
+<pre class="code ok-block" style="margin-top:0.75rem;"><span class="cmt"># Step 5-6: executor reissues a BROADER retrieval (adaptive re-retrieval)</span>
+<span class="var">ctx_b</span>   = <span class="fn">retrieve</span>(<span class="str">"Force India driver born in 1990"</span>, topk=10)  <span class="ok"># boost k</span>
+<span class="var">exclude</span> = <span class="fn">answer</span>(<span class="str">"Which Force India driver was born in 1990?"</span>, <span class="var">ctx_b</span>)
+<span class="cmt"># exclude = "Pedro Rodríguez and Sergio Pérez"   </span><span class="ok">[ok]</span></pre>
+
+<pre class="code" style="margin-top:0.75rem;"><span class="cmt"># Step 7: the final aggregation templates in the recovered variable</span>
+<span class="var">final</span> = <span class="fn">answer</span>(
+    f<span class="str">"Given: {known} is a Mexican F1 podium driver; "</span>
+    f<span class="str">"the Mexican F1 podium drivers are {exclude}. "</span>
+    f<span class="str">"Which other Mexican F1 podium driver is there besides {known}?"</span>,
+    <span class="var">ctx_b</span>,
+)
+<span class="cmt"># final -> "Pedro Rodríguez"   </span><span class="ok">[ok]</span></pre>
+              <div class="case-takeaway">
+                <strong>Takeaway:</strong> When Step 4 returns the sentinel
+                <code class="font-mono text-xs bg-white px-1 rounded">"unknown"</code>,
+                execution-guided refinement triggers a broader re-retrieval (highlighted in green).
+                The plan structure is preserved — only the under-evidenced sub-step is repaired.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- CASE C -->
+        <div class="carousel-slide" data-type="correct">
+          <div class="case-card correct">
+            <div class="case-header">
+              <div class="flex items-center gap-3">
+                <span class="case-label">Case C</span>
+                <span class="text-sm text-muted">Boolean conjunction in Python</span>
+              </div>
+              <span class="case-status">✓ Correct</span>
+            </div>
+            <div class="case-body">
+              <div class="case-question">"Are Freakonomics and In the Realm of the Hackers both American documentaries?"</div>
+              <div class="case-answers">
+                <div><span class="label">Gold</span><span class="value">no</span></div>
+                <div><span class="label">Predicted</span><span class="value predicted">No</span></div>
+              </div>
+<pre class="code"><span class="var">films</span>      = [<span class="str">"Freakonomics"</span>, <span class="str">"In the Realm of the Hackers"</span>]
+<span class="var">predicates</span> = [<span class="str">"is a documentary"</span>, <span class="str">"is American"</span>]
+
+<span class="cmt"># Two predicates per film -> grid of 4 yes/no probes</span>
+<span class="var">flags</span> = {f: {} <span class="kw">for</span> f <span class="kw">in</span> <span class="var">films</span>}
+<span class="kw">for</span> <span class="var">film</span> <span class="kw">in</span> <span class="var">films</span>:
+    <span class="kw">for</span> <span class="var">pred</span> <span class="kw">in</span> <span class="var">predicates</span>:
+        <span class="var">ctx</span>               = <span class="fn">retrieve</span>(f<span class="str">"Is {film} {pred}?"</span>, topk=5)
+        <span class="var">flags</span>[<span class="var">film</span>][<span class="var">pred</span>] = <span class="fn">answer</span>(f<span class="str">"Is {film} {pred}?"</span>, <span class="var">ctx</span>)
+
+<span class="cmt"># flags = {</span>
+<span class="cmt">#   "Freakonomics":              {"documentary": "no",  "American": "yes"},</span>
+<span class="cmt">#   "In the Realm of the Hackers":{"documentary": "yes", "American": "no"},</span>
+<span class="cmt"># }</span>
+
+<span class="cmt"># Boolean structure handled in Python -- not by the answer agent</span>
+<span class="kw">def</span> <span class="fn">qualifies</span>(d):
+    <span class="kw">return</span> <span class="fn">all</span>(v.lower() == <span class="str">"yes"</span> <span class="kw">for</span> v <span class="kw">in</span> d.values())
+
+<span class="var">final</span> = <span class="str">"yes"</span> <span class="kw">if</span> <span class="fn">all</span>(<span class="fn">qualifies</span>(<span class="var">flags</span>[f]) <span class="kw">for</span> f <span class="kw">in</span> <span class="var">films</span>) <span class="kw">else</span> <span class="str">"no"</span>
+<span class="cmt"># final -> "no"   </span><span class="ok">[ok]</span></pre>
+              <div class="case-takeaway">
+                <strong>Takeaway:</strong> The plan reduces a "both X and Y" question to a 2×2 grid
+                of yes/no probes whose conjunction is decided by Python's
+                <code class="font-mono text-xs bg-white px-1 rounded">all()</code>.
+                The answer agent never has to perform multi-clause logical reasoning.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- CASE D -->
+        <div class="carousel-slide" data-type="correct">
+          <div class="case-card correct">
+            <div class="case-header">
+              <div class="flex items-center gap-3">
+                <span class="case-label">Case D</span>
+                <span class="text-sm text-muted">Arithmetic over retrieved values</span>
+              </div>
+              <span class="case-status">✓ Correct</span>
+            </div>
+            <div class="case-body">
+              <div class="case-question">"How old was Virginia Bruce when she starred in Let Freedom Ring?"</div>
+              <div class="case-answers">
+                <div><span class="label">Gold</span><span class="value">29</span></div>
+                <div><span class="label">Predicted</span><span class="value predicted">29</span></div>
+              </div>
+<pre class="code"><span class="kw">import</span> re
+
+<span class="cmt"># Two retrievals supply the numeric inputs</span>
+<span class="var">ctx_film</span> = <span class="fn">retrieve</span>(<span class="str">"In what year did Virginia Bruce star in Let Freedom Ring?"</span>, topk=5)
+<span class="var">year_str</span> = <span class="fn">answer</span>(<span class="str">"In what year did Virginia Bruce star in Let Freedom Ring?"</span>, <span class="var">ctx_film</span>)
+<span class="cmt"># year_str = "1939"</span>
+
+<span class="var">ctx_born</span> = <span class="fn">retrieve</span>(<span class="str">"In what year was Virginia Bruce born?"</span>, topk=5)
+<span class="var">born_str</span> = <span class="fn">answer</span>(<span class="str">"In what year was Virginia Bruce born?"</span>, <span class="var">ctx_born</span>)
+<span class="cmt"># born_str = "1910"</span>
+
+<span class="cmt"># Cast text -> int and compute the answer in Python; NO further LLM call</span>
+<span class="var">year_film</span> = <span class="fn">int</span>(re.search(<span class="str">r"\d{4}"</span>, <span class="var">year_str</span>).group())
+<span class="var">year_born</span> = <span class="fn">int</span>(re.search(<span class="str">r"\d{4}"</span>, <span class="var">born_str</span>).group())
+<span class="var">final</span>     = <span class="var">year_film</span> - <span class="var">year_born</span>
+<span class="cmt"># final -> 29   </span><span class="ok">[ok]</span></pre>
+              <div class="case-takeaway">
+                <strong>Takeaway:</strong> The final answer isn't in any retrieved document — it's
+                the <em>difference</em> of two retrieved years. PyRAG separates retrieval (tools)
+                from computation (Python), giving deterministic numeric answers without LLM mental arithmetic.
+              </div>
+            </div>
+          </div>
+        </div>
+
+
+      </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="carousel-controls">
+      <button class="carousel-arrow" id="prevBtn" aria-label="Previous case">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <div class="flex flex-col items-center gap-3 flex-1">
+        <div class="carousel-dots" id="carouselDots"></div>
+        <div class="slide-indicator"><span class="current" id="currentSlide">1</span> / <span id="totalSlides">4</span></div>
+      </div>
+      <button class="carousel-arrow" id="nextBtn" aria-label="Next case">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
+    </div>
+  </div>
+</section>
+
+<!-- QUICK START -->
+<section class="max-w-5xl mx-auto px-6 mb-24">
+  <div class="section-rule"><h2>Get Started</h2></div>
+  <h3 class="font-serif text-3xl md:text-4xl mb-8 leading-tight">Run PyRAG in three commands.</h3>
+<pre class="code"><span class="cmt"># Clone</span>
+$ git clone https://github.com/GasolSun36/PyRAG.git
+$ <span class="kw">cd</span> PyRAG
+
+<span class="cmt"># Install</span>
+$ pip install -r requirements.txt
+
+<span class="cmt"># Run on HotpotQA</span>
+$ python main.py</pre>
+  <p class="text-sm text-muted mt-6">
+    Full documentation, training scripts, and reproduction details on
+    <a href="https://github.com/GasolSun36/PyRAG" class="text-accent underline hover:no-underline">GitHub</a>.
+  </p>
+</section>
+
+<!-- BIBTEX -->
+<!-- <section id="bibtex" class="max-w-3xl mx-auto px-6 mb-24">
+  <div class="section-rule"><h2>Cite</h2></div>
+  <div class="relative">
+    <button class="copy-btn" id="copyBtn" onclick="copyBibtex()">Copy</button>
+    <pre class="bibtex" id="bibtexContent">@inproceedings{sun2026pyrag,
+  title     = {Retrieval is Cheap, Show Me the Code: Executable
+               Multi-Hop Reasoning for Retrieval-Augmented Generation},
+  author    = {Sun, Jiashuo and Shi, Jimeng and Xie, Yixuan and
+               Wang, Saizhuo and Parekh, Jash Rajesh and Jiang, Pengcheng
+               and Shi, Zhiyi and Fan, Jiajun and Zheng, Qinglong and
+               Li, Peiran and Wang, Shaowen and Liu, Ge and Han, Jiawei},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
+  year      = {2026},
+}</pre>
+  </div>
+</section> -->
+
+<!-- FOOTER -->
+<footer class="border-t border-rule">
+  <div class="max-w-5xl mx-auto px-6 py-10 text-sm text-muted">
+    <div class="flex flex-wrap justify-between items-center gap-4">
+      <div>Page template adapted from <a href="https://nerfies.github.io/" class="text-accent underline hover:no-underline">Nerfies</a>.</div>
+      <div>© 2026 PyRAG Authors</div>
+    </div>
+  </div>
+</footer>
+
+<script>
+function copyBibtex() {
+  const text = document.getElementById('bibtexContent').innerText;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById('copyBtn');
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1500);
+  });
+}
+
+(function() {
+  const slidesContainer = document.getElementById('carouselSlides');
+  const slides = Array.from(slidesContainer.querySelectorAll('.carousel-slide'));
+  const dotsContainer = document.getElementById('carouselDots');
+  const prevBtn = document.getElementById('prevBtn');
+  const nextBtn = document.getElementById('nextBtn');
+  const currentEl = document.getElementById('currentSlide');
+  const totalEl = document.getElementById('totalSlides');
+
+  let index = 0;
+
+  function buildDots() {
+    dotsContainer.innerHTML = '';
+    slides.forEach((_, i) => {
+      const dot = document.createElement('button');
+      dot.className = 'carousel-dot' + (i === index ? ' active' : '');
+      dot.setAttribute('aria-label', `Go to case ${i + 1}`);
+      dot.addEventListener('click', () => goTo(i));
+      dotsContainer.appendChild(dot);
+    });
+  }
+
+  function update() {
+    slidesContainer.style.transform = `translateX(-${index * 100}%)`;
+
+    Array.from(dotsContainer.children).forEach((d, i) => {
+      d.classList.toggle('active', i === index);
+    });
+
+    currentEl.textContent = index + 1;
+    totalEl.textContent = slides.length;
+
+    prevBtn.disabled = index === 0;
+    nextBtn.disabled = index === slides.length - 1;
+  }
+
+  function goTo(i) {
+    index = Math.max(0, Math.min(slides.length - 1, i));
+    update();
+  }
+
+  prevBtn.addEventListener('click', () => goTo(index - 1));
+  nextBtn.addEventListener('click', () => goTo(index + 1));
+
+  document.addEventListener('keydown', e => {
+    const carouselSection = document.getElementById('cases');
+    const rect = carouselSection.getBoundingClientRect();
+    const inView = rect.top < window.innerHeight && rect.bottom > 0;
+    if (!inView) return;
+    if (e.key === 'ArrowLeft') goTo(index - 1);
+    if (e.key === 'ArrowRight') goTo(index + 1);
+  });
+
+  buildDots();
+  update();
+})();
+</script>
+
+</body>
+</html>
