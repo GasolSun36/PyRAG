@@ -6,7 +6,7 @@
 
 
 <p align="center">
-    📑 <a href="#"><b>Paper</b></a>&nbsp&nbsp | &nbsp&nbsp🤗 <a href="#">Project Page</a>&nbsp&nbsp | &nbsp&nbsp 🤗 <a href="https://huggingface.co/gasolsun/PyRAG-7b">Models</a> | &nbsp&nbsp 🤗 <a href="https://huggingface.co/datasets/gasolsun/PyRAG_train_test">Data</a> 
+    📑 <a href="https://arxiv.org/pdf/2605.12975"><b>Paper</b></a>&nbsp&nbsp | &nbsp&nbsp🤗 <a href="https://gasolsun36.github.io/PyRAG/">Project Page</a>&nbsp&nbsp | &nbsp&nbsp 🤗 <a href="https://huggingface.co/gasolsun/PyRAG-7b">Models</a> | &nbsp&nbsp 🤗 <a href="https://huggingface.co/datasets/gasolsun/PyRAG_train_test">Data</a> 
 </p>
 
 ---
@@ -284,6 +284,22 @@ See **Appendix E.1** of the paper for the full hyperparameter schedule.
 ### Example output
 
 We provided HotpotQA test result file (based on Qwen2.5-7B-Instruct with training-free-setting) at [https://drive.google.com/file/d/1CBacdD-za8rS-6AVbn0Jazzu2sOUcfxB/view?usp=sharing](https://drive.google.com/file/d/1CBacdD-za8rS-6AVbn0Jazzu2sOUcfxB/view?usp=sharing).
+
+### How to cite
+
+
+If you interested or inspired by this work, you can cite us by:
+```sh
+@misc{sun2026retrievalcheapcodeexecutable,
+      title={Retrieval is Cheap, Show Me the Code: Executable Multi-Hop Reasoning for Retrieval-Augmented Generation}, 
+      author={Jiashuo Sun and Jimeng Shi and Yixuan Xie and Saizhuo Wang and Jash Rajesh Parekh and Pengcheng Jiang and Zhiyi Shi and Jiajun Fan and Qinglong Zheng and Peiran Li and Shaowen Wang and Ge Liu and Jiawei Han},
+      year={2026},
+      eprint={2605.12975},
+      archivePrefix={arXiv},
+      primaryClass={cs.AI},
+      url={https://arxiv.org/abs/2605.12975}, 
+}
+```
 
 ## Acknowledgements
 
